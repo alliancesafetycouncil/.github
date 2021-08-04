@@ -1,0 +1,70 @@
+name: Pull Request CI
+
+# Run this workflow every time a commit is pushed to development
+on: pull_request
+
+jobs:
+  buildProject:
+    name: Build Project with Classes
+    runs-on: windows-latest
+
+    env:
+      class_Solution: ./ilevel-classes-dll/Classes.sln
+      class_Nuget: ./ilevel-classes-dll/nuget.config
+      class_Folder: "./ilevel-classes-dll"
+      appVarsSettings: "./ilevel-classes-dll/Build/AppVars/AppVars_ASC.ps1"
+      web_Solution: ./... .sln
+      web_Nuget: ./.../nuget.config
+      web_Folder: "./..."
+      proj_Configuration: Debug
+      proj_Platform: "Any CPU"
+      verNumber: "2.0"
+
+    steps:
+      - name: Check out Classes code
+        uses: actions/checkout@v2
+        with:
+          repository: alliancesafetycouncil/ilevel-classes-dll
+          path: ilevel-classes-dll
+          token: ${{ secrets.NPM_AUTH_TOKEN }}
+
+      - name: Check out Website code
+        uses: actions/checkout@v2
+        with:
+          path: ...
+
+      - name: Get current time
+        uses: 1466587594/get-current-time@v2
+        id: current-time
+        with:
+          format: YYYYMMDD
+          utcOffset: "-06:00"
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Setup NuGet.exe for use with actions
+        uses: NuGet/setup-nuget@v1.0.5
+
+      - name: Restore Classes NuGet Packages
+        run: nuget restore ${{ env.class_Solution }} -ConfigFile ${{ env.class_Nuget }}
+
+      - name: Restore Website NuGet Packages
+        run: nuget restore ${{ env.web_Solution }} -ConfigFile ${{ env.web_Nuget }}
+
+      - name: Update Config File
+        run: ${{ env.class_Folder }}\AppVarsSettings.ps1 -varFile "${{ env.appVarsSettings }}" -filename "${{ env.class_Folder }}\iLEVELAppVars\AppVarsVariables.vb"
+
+      - name: Update Version Number
+        env:
+          FORMATTIME: "${{ steps.current-time.outputs.formattedTime }}"
+        run: ${{ env.class_Folder }}\UpdateVersion.ps1 -versionNum "${{ env.verNumber }}.${{ github.run_number }}.${{ env.FORMATTIME }}" -versionDate "${{ env.FORMATTIME }}" -filename "${{ env.class_Folder }}\iLEVELClass\SCVersion.vb"
+
+      - name: Build Classes Solution
+        run: msbuild ${{ env.class_Solution }} -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}"
+
+      - name: Copy Class Files
+        run: Copy-Item -Path "${{ env.class_Folder}}\iLEVELClass\bin\Debug\*" -Destination "${{ env.web_Folder}}\iLEVEL\Bin" -Recurse -Force
+
+      - name: Build Web Solution
+        run: msbuild ${{ env.web_Solution }} -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}"
