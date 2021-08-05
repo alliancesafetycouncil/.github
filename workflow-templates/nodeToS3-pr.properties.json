@@ -1,0 +1,5 @@
+{
+    "name": "Node Web to S3 Bucket Pull Request Workflow",
+    "description": "ASC CI workflow template for Node Web to S3 Bucket Pull Requests.",
+    "iconName": "workflow-icon"
+}

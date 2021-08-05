@@ -1,0 +1,67 @@
+name: Development CI
+
+on:
+  push:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+jobs:
+  buildWeb:
+    runs-on: ubuntu-latest
+
+    env:
+      nodeVersion: 14.x
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js ${{ env.nodeVersion }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ env.nodeVersion }}
+
+    - name: Install dependencies
+      run: npm install
+      env:
+        NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+    - name: Build
+      run: CI='' npm run build
+      env:
+        NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        name: webArtifact
+        path: "./build"
+
+  publishToAWS:
+    needs: buildWeb
+    environment: development
+    runs-on: ubuntu-latest
+
+    env: 
+      bucketName: 
+      cloudfrontID: 
+      awsRegion: us-east-1
+
+    steps:
+    - name: Download a Build Artifact
+      uses: actions/download-artifact@v2.0.5
+      with:
+        name: webArtifact
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.awsRegion }}
+
+    - name: Deploy static site to S3 bucket
+      run: aws s3 sync ./ s3://${{ env.bucketName }} --delete
+
+    - name: Invalidate CloudFront Cache
+      run: aws cloudfront create-invalidation --distribution-id ${{ env.cloudfrontID }} --paths "/*"
