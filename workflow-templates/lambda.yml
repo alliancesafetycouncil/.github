@@ -1,0 +1,68 @@
+name: Development CI
+
+# Run this workflow every time a commit is pushed to development
+on:
+  push:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+jobs:
+  buildCode:
+    name: Build Lambda Code
+    runs-on: ubuntu-latest
+
+    env:
+      nodeVersion: 12.x
+      NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js ${{ env.nodeVersion }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ env.nodeVersion }}
+
+      - name: Install dependencies
+        run: npm install -no-cache          
+
+      - name: Install Serverless
+        run: npm install -g serverless
+
+      - name: Package Code
+        run: sls package --package ./tmp/lambda_artifacts/
+
+      - name: Build Artifact
+        uses: actions/upload-artifact@v2.2.4
+        with:
+          name: webArtifact
+          path: "./tmp/lambda_artifacts"
+
+
+  publishToAWS:
+    name: Publish to AWS
+    needs: buildCode
+    environment: development
+    runs-on: ubuntu-latest
+
+    env: 
+      lambdaName: 
+      zipFileName: function.zip
+      awsRegion: us-east-1
+
+    steps:
+    - name: Download a Build Artifact
+      uses: actions/download-artifact@v2.0.5
+      with:
+        name: webArtifact
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.awsRegion }}
+
+    - name: Deploy Lambda Code
+      run: aws lambda update-function-code --function-name ${{ env.lambdaName }} --zip-file fileb://${{ env.zipFileName }}

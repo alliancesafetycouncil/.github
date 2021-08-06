@@ -1,0 +1,31 @@
+name: Pull Request CI
+
+# Run this workflow every time a commit is pushed to development
+on: [ pull_request ]
+
+jobs:
+  buildCode:
+    name: Build Lambda Code
+    runs-on: ubuntu-latest
+
+    env:
+      nodeVersion: 12.x
+      NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js ${{ env.nodeVersion }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ env.nodeVersion }}
+
+      - name: Install dependencies
+        run: npm install -no-cache          
+
+      - name: Install Serverless
+        run: npm install -g serverless
+
+      - name: Package Code
+        run: sls package --package ./tmp/lambda_artifacts/

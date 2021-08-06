@@ -1,0 +1,84 @@
+name: Development Layer CI
+
+on:
+  push:
+    branches: [ $default-branch ]
+    paths: 
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  buildCode:
+    name: Build Layer Code
+    runs-on: ubuntu-latest
+
+    env:
+      nodeVersion: 12.x
+      NPM_AUTH_TOKEN: ${{secrets.NPM_AUTH_TOKEN}}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js ${{ env.nodeVersion }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ env.nodeVersion }}
+
+      - name: Make Layer Code
+        run: |
+          mkdir ./tmp
+          mkdir ./lambda_artifacts
+          mkdir ./tmp/nodejs
+          cp package.json ./tmp/nodejs/
+          cd ./tmp/nodejs
+          npm install
+
+      - name: Archive Website
+        uses: papeloto/action-zip@v1
+        with:
+          files: ./tmp
+          dest: ./lambda_artifacts/layer.zip
+
+      - name: Build Artifact
+        uses: actions/upload-artifact@v2.2.4
+        with:
+          name: layerArtifact
+          path: "./lambda_artifacts"
+
+
+  publishToAWS:
+    name: Publish to AWS
+    needs: buildCode
+    environment: development
+    runs-on: ubuntu-latest
+
+    env: 
+      layerName: 
+      lambdaName: 
+      zipFileName: layer.zip
+      runtimes: nodejs12.x
+      awsRegion: us-east-1
+
+    steps:
+    - name: Download a Build Artifact
+      uses: actions/download-artifact@v2.0.5
+      with:
+        name: layerArtifact
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.awsRegion }}
+
+    - name: Deploy Layer Code
+      run: |
+        result=$(aws lambda publish-layer-version --layer-name ${{ env.layerName }} --description "$default-branch Layer" --zip-file fileb://${{ env.zipFileName }} --compatible-runtimes ${{ env.runtimes }})
+        echo "RESULT_VERSION_ARN=$(jq '.LayerVersionArn' <<< "$result")" >> $GITHUB_ENV
+
+    - name: Update Lambda
+      run: |
+        aws lambda update-function-configuration --function-name ${{ env.lambdaName }} --layers ${{ env.RESULT_VERSION_ARN }}
+        

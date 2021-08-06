@@ -1,0 +1,5 @@
+{
+    "name": "AWS Serverless Lambda Pull Request Workflow",
+    "description": "ASC CI workflow template for AWS Serverless Lambda Pull Requests.",
+    "iconName": "workflow-icon"
+}
