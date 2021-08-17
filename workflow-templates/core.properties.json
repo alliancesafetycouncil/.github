@@ -1,0 +1,5 @@
+{
+    "name": ".NET Core Website Workflow",
+    "description": "ASC CI workflow template for .NET Core Website.",
+    "iconName": "workflow-icon"
+}

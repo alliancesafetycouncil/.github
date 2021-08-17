@@ -1,0 +1,5 @@
+{
+    "name": ".NET Core Pull Request Workflow",
+    "description": "ASC CI workflow template for .NET Core Pull Requests.",
+    "iconName": "workflow-icon"
+}

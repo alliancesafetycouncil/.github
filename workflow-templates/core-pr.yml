@@ -1,0 +1,43 @@
+name: Pull Request CI
+
+#Replace ... with current repository info
+
+on: pull_request
+
+jobs:
+  build:
+    name: Build API
+    runs-on: windows-latest
+
+    env:
+      proj_Solution: ....sln
+      proj_VerNumber: '1.1.1'
+      proj_BuildFolder: .\...\bin\Release\netcoreapp2.1\
+      proj_Configuration: Release
+      proj_Platform: "Any CPU"
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+
+    - name: Get current time
+      uses: 1466587594/get-current-time@v2
+      id: current-time
+      with:
+        format: YYYYMMDD
+        utcOffset: "-06:00"
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Setup NuGet.exe for use with actions
+      uses: NuGet/setup-nuget@v1.0.5
+
+    - name: Restore API NuGet Packages
+      run: nuget restore ${{ env.proj_Solution }}
+
+    - name: Build API Solution
+      env:
+        FORMATTIME: "${{ steps.current-time.outputs.formattedTime }}"
+        CURRYEAR: "${{ steps.current-time.outputs.year }}"
+      run: msbuild ${{ env.proj_Solution }} -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}" -p:Version="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:AssemblyVersion="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:FileVersion="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:Description=${{ env.FORMATTIME }} -p:Copyright="Copyright ${{ env.CURRYEAR }}"

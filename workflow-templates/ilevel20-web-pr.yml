@@ -1,5 +1,7 @@
 name: Pull Request CI
 
+#Replace ... with current repository info
+
 # Run this workflow every time a commit is pushed to development
 on: pull_request
 

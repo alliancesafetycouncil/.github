@@ -1,0 +1,102 @@
+name: Development CI
+
+on:
+  push:
+    branches:
+      - $default-branch
+  workflow_dispatch:
+
+jobs:
+  buildAPI:
+    name: Build API
+    runs-on: windows-latest
+
+    env:
+      proj_Solution: ....sln
+      proj_VerNumber: '1.1.1'
+      proj_BuildFolder: .\
+      proj_Configuration: Release
+      proj_Platform: "Any CPU"
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+
+    - name: Get current time
+      uses: 1466587594/get-current-time@v2
+      id: current-time
+      with:
+        format: YYYYMMDD
+        utcOffset: "-06:00"
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Setup NuGet.exe for use with actions
+      uses: NuGet/setup-nuget@v1.0.5
+
+    - name: Restore API NuGet Packages
+      run: nuget restore ${{ env.proj_Solution }}
+
+    - name: Build API Solution
+      env:
+        FORMATTIME: "${{ steps.current-time.outputs.formattedTime }}"
+        CURRYEAR: "${{ steps.current-time.outputs.year }}"
+      run: msbuild ${{ env.proj_Solution }} -p:DeployOnBuild=true -p:WebPublishMethod=Package -p:PackageAsSingleFile=true -p:SkipInvalidConfigurations=true -p:DesktopBuildPackageLocation="./artifacts/webApp.zip" -p:DeployIisAppPath="Default Web Site" -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}" -p:Version="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:AssemblyVersion="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:FileVersion="${{ env.proj_VerNumber }}.${{ github.run_number }}" -p:Description=${{ env.FORMATTIME }} -p:Copyright="Copyright ${{ env.CURRYEAR }}"
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        name: apiArtifact
+        path: "./iLEVEL.API/artifacts/"
+
+
+  pushAPI:
+    name: Publish API to Dev
+    environment: development
+    needs: buildAPI
+    runs-on: [self-hosted, devweb]
+
+    env:
+      poolName: "devapi.ilevel.org"
+      filePath: 'E:\Websites\devapi.ilevel.org'
+      backupPath: 'E:\Backups\devapi.ilevel.org'
+      zipFolder: '.\webApp\Content\D_C\a\ilevel-phoenix-api\ilevel-phoenix-api\iLEVEL.API\obj\Release\netcoreapp2.1\PubTmp\Out\'
+
+    steps:
+      - name: Download a Build Artifact
+        uses: actions/download-artifact@v2.0.5
+        with:
+          name: apiArtifact
+
+      - name: Extract File
+        run: Expand-Archive -Path webApp.zip -DestinationPath ".\webApp" -Force
+
+      #- name: Backup Website
+      #  run: Compress-Archive -Path "${{ env.filePath }}\*" -DestinationPath "${{ env.backupPath }}\backup-${{ github.run_number }}.zip" -CompressionLevel Fastest
+
+      - name: Stop IIS Website
+        run: C:\Windows\system32\inetsrv\appcmd stop apppool /apppool.name:"${{ env.poolName }}"
+        shell: cmd
+
+      - name: Remove Files
+        run: Remove-Item -Path "${{ env.filePath }}\*" -Force -Recurse
+
+      - name: Copy over Files
+        run: Copy-Item -Path "${{ env.zipFolder }}*" -Destination "${{ env.filePath }}" -Force -Recurse
+
+      - name: Update AppSettings
+        uses: microsoft/variable-substitution@v1 
+        with:
+          files: '${{ env.filePath }}\appsettings.json'
+        env:
+          AppConfiguration.ApplicationDesc: "Alliance Safety Council Development API" 
+
+          ConnectionStrings.SHTCConnString: "Server=DEVSQLSVR;Database=SHTC_Dev;Trusted_Connection=Yes;MultipleActiveResultSets=true"
+
+      - name: Start IIS Website
+        run: C:\Windows\system32\inetsrv\appcmd start apppool /apppool.name:"${{ env.poolName }}"
+        shell: cmd
+
+      - name: Cleanup Work Files
+        run: Remove-Item ".\*" -Recurse -Force
