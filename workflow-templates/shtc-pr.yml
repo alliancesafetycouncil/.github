@@ -1,0 +1,31 @@
+name: Pull Request CI
+
+on: [pull_request]
+    
+
+jobs:
+  buildDB:
+    name: Build Database
+    runs-on: windows-latest
+
+    env:
+      proj_Solution: './SHTCDatabase/SHTCDatabase.sqlproj'
+      proj_BuildFolder: .\
+      proj_Configuration: Release
+      proj_Platform: "Any CPU"
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Setup NuGet.exe for use with actions
+      uses: NuGet/setup-nuget@v1.0.5
+
+    - name: Restore NuGet Packages
+      run: nuget restore ${{ env.proj_Solution }}
+
+    - name: Build Solution
+      run: msbuild ${{ env.proj_Solution }}  -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}" -p:DeployOnBuild=true -p:WebPublishMethod=Package -p:PackageAsSingleFile=true -p:SkipInvalidConfigurations=true -p:DesktopBuildPackageLocation=".\artifacts\WebApp.zip" -p:DeployIisAppPath="Default Web Site"

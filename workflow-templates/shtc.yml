@@ -1,0 +1,79 @@
+name: Development CI
+
+on:
+  push:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+jobs:
+  buildDB:
+    name: Build Database
+    runs-on: windows-latest
+
+    env:
+      proj_Solution: './SHTCDatabase/SHTCDatabase.sqlproj'
+      proj_BuildFolder: .\
+      proj_Configuration: Release
+      proj_Platform: "Any CPU"
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Setup NuGet.exe for use with actions
+      uses: NuGet/setup-nuget@v1.0.5
+
+    - name: Restore NuGet Packages
+      run: nuget restore ${{ env.proj_Solution }}
+
+    - name: Build Solution
+      run: msbuild ${{ env.proj_Solution }}  -p:Configuration=${{ env.proj_Configuration }} -p:Platform="${{ env.proj_Platform }}" -p:DeployOnBuild=true -p:WebPublishMethod=Package -p:PackageAsSingleFile=true -p:SkipInvalidConfigurations=true -p:DesktopBuildPackageLocation=".\artifacts\WebApp.zip" -p:DeployIisAppPath="Default Web Site"
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        name: dacpac
+        path: "./SHTCDatabase/bin/Output/"
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        name: databasePublishProfiles
+        path: "./SHTCDatabase/PublishProfiles/SHTCDatabase.local.publish.xml"
+
+
+  pushDatabase:
+    name: Publish Database to Dev
+    environment: development
+    needs: buildDB
+    runs-on: [self-hosted, devsql]
+
+    env:
+      serverName: 'DEVSQLSVR'
+      databaseName: 'SHTC_Dev'
+      dacpacFile: '.\dacpac\SHTCDatabase.dacpac'
+      publishProfile: '.\databasePublishProfiles\SHTCDatabase.local.publish.xml'
+      mdbFileFullPath: 'E:\SQL_DATA\SHTC_Dev.mdf'
+      ldbFileFullPath: 'F:\SQL_LOG\SHTC_Dev.ldf'
+      ndbFileFullPath: 'E:\SQL_DATA\SHTC_Dev.ndf'
+      fullBackupPath: '\\scfilesvr2\SQLBackups2\SHTC_Dev\SHTC_Dev.bak'
+
+    steps:
+      - name: Download a Build Artifacts
+        uses: actions/download-artifact@v2.0.5
+
+      - name: Create Database Files
+        continue-on-error: true
+        run: Invoke-SqlCmd -ServerInstance "${{ env.serverName }}" -Query "CREATE DATABASE [${{ env.databaseName }}] CONTAINMENT = NONE ON PRIMARY ( NAME = N'shtc_data', FILENAME = N'${{ env.mdbFileFullPath }}' , SIZE = 1024KB , MAXSIZE = UNLIMITED, FILEGROWTH = 524288KB ), FILEGROUP [ftfg_Cat_Internet_Log] (NAME = N'ftrow_Cat_Internet_Log', FILENAME = N'${{ env.ndbFileFullPath }}' , SIZE = 1024KB , MAXSIZE = UNLIMITED, FILEGROWTH = 524288KB ) LOG ON ( NAME = N'shtc_log', FILENAME = N'${{ env.ldbFileFullPath }}' , SIZE = 1024KB , MAXSIZE = 2048GB , FILEGROWTH = 524288KB )" -QueryTimeout 2400
+
+      - name: Run DacpacFile
+        run: sqlpackage /Action:Publish /SourceFile:"${{ env.dacpacFile }}" /TargetServerName:"${{ env.serverName }}" /TargetDatabaseName:"${{ env.databaseName }}" /Profile:"${{ env.publishProfile }}"
+
+      - name: Reset Service Broker
+        run: 'Invoke-Sqlcmd -ServerInstance ${{ env.serverName }} -ConnectionTimeout 36000 -QueryTimeout 36000 -Query "ALTER DATABASE [${{ env.databaseName }}] SET NEW_BROKER WITH ROLLBACK IMMEDIATE;"'
+
+      - name: Cleanup Work Files
+        run: Remove-Item ".\*" -Recurse -Force

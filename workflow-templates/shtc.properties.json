@@ -1,0 +1,5 @@
+{
+    "name": "SQL Database Workflow",
+    "description": "ASC CI workflow template for SQL Database.",
+    "iconName": "workflow-icon"
+}

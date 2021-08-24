@@ -1,0 +1,5 @@
+{
+    "name": "SQL Database Pull Request Workflow",
+    "description": "ASC CI workflow template for SQL Database Pull Requests.",
+    "iconName": "workflow-icon"
+}
